@@ -22,6 +22,7 @@ exports._loadTileJSON = function(options) {
             cacheSize: 20,
             minzoom: this.minzoom,
             maxzoom: this.maxzoom,
+            reparseOverscaled: this.reparseOverscaled,
             load: this._loadTile.bind(this),
             abort: this._abortTile.bind(this),
             unload: this._unloadTile.bind(this),
@@ -52,6 +53,10 @@ exports._renderTiles = function(layers, painter) {
             y = pos.y,
             w = pos.w;
 
+        // if z > maxzoom then the tile is actually a overscaled maxzoom tile,
+        // so calculate the matrix the maxzoom tile would use.
+        z = Math.min(z, this.maxzoom);
+
         x += w * (1 << z);
         tile.calculateMatrices(z, x, y, painter.transform, painter);
 
@@ -68,7 +73,7 @@ exports._vectorFeaturesAt = function(point, params, callback) {
         return callback(null, []);
 
     this.dispatcher.send('query features', {
-        id: result.tile.uid,
+        uid: result.tile.uid,
         x: result.x,
         y: result.y,
         scale: result.scale,
@@ -85,5 +90,12 @@ exports.create = function(source) {
         geojson: require('./geojson_source'),
         video: require('./video_source')
     };
+
+    for (var type in sources) {
+        if (source instanceof sources[type]) {
+            return source;
+        }
+    }
+
     return new sources[source.type](source);
 };

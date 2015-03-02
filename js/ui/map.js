@@ -34,6 +34,7 @@ var Map = module.exports = function(options) {
     util.bindAll([
         '_forwardStyleEvent',
         '_forwardSourceEvent',
+        '_forwardLayerEvent',
         '_forwardTileEvent',
         '_onStyleLoad',
         '_onStyleChange',
@@ -84,16 +85,6 @@ util.extend(Map.prototype, {
         attributionControl: true
     },
 
-    addSource: function(id, source) {
-        this.style.addSource(id, source);
-        return this;
-    },
-
-    removeSource: function(id) {
-        this.style.removeSource(id);
-        return this;
-    },
-
     addControl: function(control) {
         control.addTo(this);
         return this;
@@ -136,13 +127,13 @@ util.extend(Map.prototype, {
     addClass: function(klass, options) {
         if (this._classes[klass]) return;
         this._classes[klass] = true;
-        if (this.style) this.style._cascadeClasses(this._classes, options);
+        if (this.style) this.style._cascade(this._classes, options);
     },
 
     removeClass: function(klass, options) {
         if (!this._classes[klass]) return;
         delete this._classes[klass];
-        if (this.style) this.style._cascadeClasses(this._classes, options);
+        if (this.style) this.style._cascade(this._classes, options);
     },
 
     setClasses: function(klasses, options) {
@@ -150,7 +141,7 @@ util.extend(Map.prototype, {
         for (var i = 0; i < klasses.length; i++) {
             this._classes[klasses[i]] = true;
         }
-        if (this.style) this.style._cascadeClasses(this._classes, options);
+        if (this.style) this.style._cascade(this._classes, options);
     },
 
     hasClass: function(klass) {
@@ -165,12 +156,12 @@ util.extend(Map.prototype, {
     resize: function() {
         var width = 0, height = 0;
 
-        if (this.container) {
-            width = this.container.offsetWidth || 400;
-            height = this.container.offsetHeight || 300;
+        if (this._container) {
+            width = this._container.offsetWidth || 400;
+            height = this._container.offsetHeight || 300;
         }
 
-        this.canvas.resize(width, height);
+        this._canvas.resize(width, height);
 
         this.transform.width = width;
         this.transform.height = height;
@@ -214,6 +205,8 @@ util.extend(Map.prototype, {
                 .off('source.load', this._onSourceUpdate)
                 .off('source.error', this._forwardSourceEvent)
                 .off('source.change', this._onSourceUpdate)
+                .off('layer.add', this._forwardLayerEvent)
+                .off('layer.remove', this._forwardLayerEvent)
                 .off('tile.add', this._forwardTileEvent)
                 .off('tile.remove', this._forwardTileEvent)
                 .off('tile.load', this.update)
@@ -223,7 +216,7 @@ util.extend(Map.prototype, {
 
         if (!style) {
             this.style = null;
-            return;
+            return this;
         } else if (style instanceof Style) {
             this.style = style;
         } else {
@@ -239,12 +232,90 @@ util.extend(Map.prototype, {
             .on('source.load', this._onSourceUpdate)
             .on('source.error', this._forwardSourceEvent)
             .on('source.change', this._onSourceUpdate)
+            .on('layer.add', this._forwardLayerEvent)
+            .on('layer.remove', this._forwardLayerEvent)
             .on('tile.add', this._forwardTileEvent)
             .on('tile.remove', this._forwardTileEvent)
             .on('tile.load', this.update)
             .on('tile.error', this._forwardTileEvent);
 
         return this;
+    },
+
+    addSource: function(id, source) {
+        this.style.addSource(id, source);
+        return this;
+    },
+
+    removeSource: function(id) {
+        this.style.removeSource(id);
+        return this;
+    },
+
+    /**
+     * Add a layer to the map style. The layer will be inserted before the layer with
+     * ID `before`, or appended if `before` is omitted.
+     *
+     * @param layer {Layer}
+     * @param before {string=} ID of an existing layer to insert before
+     * @fires layer.add
+     * @returns {Map} `this`
+     */
+    addLayer: function(layer, before) {
+        this.style.addLayer(layer, before);
+        this.style._cascade(this._classes);
+        return this;
+    },
+
+    /**
+     * Remove the layer with the given `id` from the map. Any layers which refer to the
+     * specified layer via a `ref` property are also removed.
+     *
+     * @param id {string}
+     * @fires layer.remove
+     * @returns {Map} `this`
+     */
+    removeLayer: function(id) {
+        this.style.removeLayer(id);
+        this.style._cascade(this._classes);
+        return this;
+    },
+
+    setFilter: function(layer, filter) {
+        this.style.setFilter(layer, filter);
+        return this;
+    },
+
+    getFilter: function(layer) {
+        return this.style.getFilter(layer);
+    },
+
+    setPaintProperty: function(layer, name, value, klass) {
+        this.style.setPaintProperty(layer, name, value, klass);
+        this.style._cascade(this._classes);
+        this.update(true);
+        return this;
+    },
+
+    getPaintProperty: function(layer, name, klass) {
+        return this.style.getPaintProperty(layer, name, klass);
+    },
+
+    setLayoutProperty: function(layer, name, value) {
+        this.style.setLayoutProperty(layer, name, value);
+        return this;
+    },
+
+    getLayoutProperty: function(layer, name) {
+        return this.style.getLayoutProperty(layer, name);
+    },
+
+    getContainer: function() {
+        return this._container;
+    },
+
+    getCanvas: function() {
+        return this._canvas.getElement();
     },
 
     _move: function(zoom, rotate) {
@@ -261,13 +332,13 @@ util.extend(Map.prototype, {
 
     _setupContainer: function() {
         var id = this.options.container;
-        var container = this.container = typeof id === 'string' ? document.getElementById(id) : id;
+        var container = this._container = typeof id === 'string' ? document.getElementById(id) : id;
         if (container) container.classList.add('mapboxgl-map');
-        this.canvas = new Canvas(this, container);
+        this._canvas = new Canvas(this, container);
     },
 
     _setupPainter: function() {
-        var gl = this.canvas.getWebGLContext();
+        var gl = this._canvas.getWebGLContext();
 
         if (!gl) {
             console.error('Failed to initialize WebGL');
@@ -372,6 +443,10 @@ util.extend(Map.prototype, {
     },
 
     _forwardSourceEvent: function(e) {
+        this.fire(e.type, util.extend({style: e.target}, e));
+    },
+
+    _forwardLayerEvent: function(e) {
         this.fire(e.type, util.extend({style: e.target}, e));
     },
 

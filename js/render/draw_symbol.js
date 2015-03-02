@@ -30,7 +30,7 @@ var defaultSizes = {
 function drawSymbol(painter, layer, posMatrix, tile, elementGroups, prefix, sdf) {
     var gl = painter.gl;
 
-    posMatrix = painter.translateMatrix(posMatrix, tile.zoom, layer.paint[prefix + '-translate'], layer.paint[prefix + '-translate-anchor']);
+    posMatrix = painter.translateMatrix(posMatrix, tile, layer.paint[prefix + '-translate'], layer.paint[prefix + '-translate-anchor']);
 
     var exMatrix = mat4.clone(painter.projectionMatrix);
     var alignedWithMap = layer.layout[prefix + '-rotation-alignment'] === 'map';
@@ -64,7 +64,8 @@ function drawSymbol(painter, layer, posMatrix, tile, elementGroups, prefix, sdf)
         buffer = tile.buffers.glyphVertex;
         texsize = [painter.glyphAtlas.width / 4, painter.glyphAtlas.height / 4];
     } else {
-        painter.spriteAtlas.bind(gl, alignedWithMap || painter.options.rotating || painter.options.zooming || fontScale != 1 || sdf);
+        painter.spriteAtlas.bind(gl, alignedWithMap || painter.options.rotating ||
+            painter.options.zooming || fontScale !== 1 || sdf);
         buffer = tile.buffers.iconVertex;
         texsize = [painter.spriteAtlas.width / 4, painter.spriteAtlas.height / 4];
     }

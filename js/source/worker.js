@@ -29,45 +29,54 @@ util.extend(Worker.prototype, {
 
     'load tile': function(params, callback) {
         var source = params.source,
-            id = params.id;
+            uid = params.uid;
 
         if (!this.loading[source])
             this.loading[source] = {};
 
-        this.loading[source][id] = ajax.getArrayBuffer(params.url, function(err, data) {
-            delete this.loading[source][id];
+        this.loading[source][uid] = ajax.getArrayBuffer(params.url, function(err, data) {
+            delete this.loading[source][uid];
 
             if (err) return callback(err);
 
-            var tile = new WorkerTile(
-                params.id, params.zoom, params.maxZoom,
-                params.tileSize, params.source, params.depth);
-
-            tile.parse(new vt.VectorTile(new Protobuf(new Uint8Array(data))), this.layers, this.actor, callback);
+            var tile = new WorkerTile(params);
+            tile.data = new vt.VectorTile(new Protobuf(new Uint8Array(data)));
+            tile.parse(tile.data, this.layers, this.actor, callback);
 
             this.loaded[source] = this.loaded[source] || {};
-            this.loaded[source][id] = tile;
+            this.loaded[source][uid] = tile;
         }.bind(this));
     },
 
+    'reload tile': function(params, callback) {
+        var loaded = this.loaded[params.source],
+            uid = params.uid;
+        if (loaded && loaded[uid]) {
+            var tile = loaded[uid];
+            tile.parse(tile.data, this.layers, this.actor, callback);
+        }
+    },
+
     'abort tile': function(params) {
-        var source = this.loading[params.source];
-        if (source && source[params.id]) {
-            source[params.id].abort();
-            delete source[params.id];
+        var loading = this.loading[params.source],
+            uid = params.uid;
+        if (loading && loading[uid]) {
+            loading[uid].abort();
+            delete loading[uid];
         }
     },
 
     'remove tile': function(params) {
-        var source = params.source,
-            id = params.id;
-        if (this.loaded[source] && this.loaded[source][id]) {
-            delete this.loaded[source][id];
+        var loaded = this.loaded[params.source],
+            uid = params.uid;
+        if (loaded && loaded[uid]) {
+            delete loaded[uid];
         }
     },
 
     'parse geojson': function(params, callback) {
         var indexData = function(err, data) {
+            if (err) return callback(err);
             this.geoJSONIndexes[params.source] = geojsonvt(data, {baseZoom: params.maxZoom});
             callback(null);
         }.bind(this);
@@ -79,9 +88,7 @@ util.extend(Worker.prototype, {
 
     'load geojson tile': function(params, callback) {
         var source = params.source,
-            tileId = params.tileId,
-            id = params.id,
-            coord = TileCoord.fromID(tileId);
+            coord = TileCoord.fromID(params.id);
 
         // console.time('tile ' + coord.z + ' ' + coord.x + ' ' + coord.y);
 
@@ -93,15 +100,15 @@ util.extend(Worker.prototype, {
 
         if (!geoJSONTile) return callback(null, null); // nothing in the given tile
 
-        var tile = new WorkerTile(id, params.zoom, params.maxZoom, params.tileSize, source, params.depth);
+        var tile = new WorkerTile(params);
         tile.parse(new GeoJSONWrapper(geoJSONTile.features), this.layers, this.actor, callback);
 
         this.loaded[source] = this.loaded[source] || {};
-        this.loaded[source][id] = tile;
+        this.loaded[source][params.uid] = tile;
     },
 
     'query features': function(params, callback) {
-        var tile = this.loaded[params.source] && this.loaded[params.source][params.id];
+        var tile = this.loaded[params.source] && this.loaded[params.source][params.uid];
         if (tile) {
             tile.featureTree.query(params, callback);
         } else {

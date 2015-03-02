@@ -1,38 +1,31 @@
 'use strict';
 
 var FeatureTree = require('../data/feature_tree');
-var vt = require('vector-tile');
 var Collision = require('../symbol/collision');
 var BufferSet = require('../data/buffer/buffer_set');
 var createBucket = require('../data/create_bucket');
 
-function getGeometry(feature) {
-    return feature.loadGeometry();
-}
-
-function getType(feature) {
-    return vt.VectorTileFeature.types[feature.type];
-}
-
 module.exports = WorkerTile;
 
-function WorkerTile(id, zoom, maxZoom, tileSize, source, depth) {
-    this.id = id;
-    this.zoom = zoom;
-    this.maxZoom = maxZoom;
-    this.tileSize = tileSize;
-    this.source = source;
-    this.depth = depth;
-    this.featureTree = new FeatureTree(getGeometry, getType);
+function WorkerTile(params) {
+    this.id = params.id;
+    this.uid = params.uid;
+    this.zoom = params.zoom;
+    this.maxZoom = params.maxZoom;
+    this.tileSize = params.tileSize;
+    this.source = params.source;
+    this.overscaling = params.overscaling;
 }
 
 WorkerTile.prototype.parse = function(data, layers, actor, callback) {
+    this.featureTree = new FeatureTree(this.id);
+
     var i, k,
         tile = this,
         layer,
         bucket,
         buffers = new BufferSet(),
-        collision = new Collision(this.zoom, 4096, this.tileSize, this.depth),
+        collision = new Collision(this.zoom, 4096, this.tileSize),
         buckets = {},
         bucketsInOrder = [],
         bucketsBySourceLayer = {};
@@ -55,7 +48,11 @@ WorkerTile.prototype.parse = function(data, layers, actor, callback) {
         if (maxzoom && this.zoom >= maxzoom)
             continue;
 
-        bucket = createBucket(layer, buffers, collision);
+        var visibility = layer.layout.visibility;
+        if (visibility === 'none')
+            continue;
+
+        bucket = createBucket(layer, buffers, collision, this.zoom, this.overscaling);
         bucket.layers = [layer.id];
 
         buckets[bucket.id] = bucket;
@@ -179,7 +176,11 @@ WorkerTile.prototype.parse = function(data, layers, actor, callback) {
         }
 
         remaining--;
-        if (!remaining) return done();
+
+        if (!remaining) {
+            done();
+            return;
+        }
 
         // try parsing the next bucket, if it is ready
         if (bucket.next) {

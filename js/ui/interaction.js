@@ -12,6 +12,7 @@ function Interaction(el) {
 
     var rotating = false,
         panned = false,
+        boxzoom = false,
         firstPos = null,
         pos = null,
         inertia = null,
@@ -44,6 +45,7 @@ function Interaction(el) {
     scrollwheel(zoom);
     el.addEventListener('dblclick', ondoubleclick, false);
     window.addEventListener('resize', resize, false);
+    el.addEventListener('keydown', keydown, false);
 
     function zoom(type, delta, point) {
         interaction.fire('zoom', {
@@ -100,6 +102,15 @@ function Interaction(el) {
         interaction.fire('resize');
     }
 
+    function keydown(ev) {
+        if (boxzoom && ev.keyCode === 27) {
+            interaction.fire('boxzoomcancel');
+            boxzoom = false;
+        }
+
+        interaction.fire('keydown', ev);
+    }
+
     function rotate(point) {
         if (pos) {
             interaction.fire('rotate', {
@@ -118,21 +129,33 @@ function Interaction(el) {
     function onmousedown(ev) {
         firstPos = pos = mousePos(ev);
         interaction.fire('down');
+        if (ev.shiftKey || ((ev.which === 1) && (ev.button === 1))) {
+          boxzoom = true;
+        }
     }
 
-    function onmouseup() {
-        panned = pos && firstPos && (pos.x != firstPos.x || pos.y != firstPos.y);
+    function onmouseup(ev) {
+        panned = pos && firstPos && (pos.x !== firstPos.x || pos.y !== firstPos.y);
 
         rotating = false;
         pos = null;
 
-        if (inertia && inertia.length >= 2 && now > Date.now() - 100) {
+        if (boxzoom) {
+            interaction.fire('boxzoomend', {
+                start: firstPos,
+                current: mousePos(ev)
+            });
+            boxzoom = false;
+
+        } else if (inertia && inertia.length >= 2 && now > Date.now() - 100) {
             var last = inertia[inertia.length - 1],
                 first = inertia[0],
                 velocity = last[1].sub(first[1]).div(last[0] - first[0]);
-            interaction.fire('panend',  {inertia: velocity});
+            interaction.fire('panend', {inertia: velocity});
 
-        } else interaction.fire('panend');
+        } else {
+          interaction.fire('panend');
+        }
 
         inertia = null;
         now = null;
@@ -141,12 +164,22 @@ function Interaction(el) {
     function onmousemove(ev) {
         var point = mousePos(ev);
 
-        if (rotating) { rotate(point); }
-        else if (pos) pan(point);
-        else {
-            var target = ev.toElement;
-            while (target && target != el && target.parentNode) target = target.parentNode;
-            if (target == el) {
+        if (boxzoom) {
+            interaction.fire('boxzoomstart', {
+                start: firstPos,
+                current: point
+            });
+
+        } else if (rotating) {
+            rotate(point);
+
+        } else if (pos) {
+            pan(point);
+
+        } else {
+            var target = ev.toElement || ev.target;
+            while (target && target !== el && target.parentNode) target = target.parentNode;
+            if (target === el) {
                 hover(point);
             }
         }
@@ -264,8 +297,8 @@ function Interaction(el) {
         function wheel(e) {
             var deltaY = e.deltaY;
             // Firefox doubles the values on retina screens...
-            if (firefox && e.deltaMode == window.WheelEvent.DOM_DELTA_PIXEL) deltaY /= browser.devicePixelRatio;
-            if (e.deltaMode == window.WheelEvent.DOM_DELTA_LINE) deltaY *= 40;
+            if (firefox && e.deltaMode === window.WheelEvent.DOM_DELTA_PIXEL) deltaY /= browser.devicePixelRatio;
+            if (e.deltaMode === window.WheelEvent.DOM_DELTA_LINE) deltaY *= 40;
             scroll(deltaY, e);
             e.preventDefault();
         }

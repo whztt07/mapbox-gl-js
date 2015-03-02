@@ -21,6 +21,7 @@ VectorTileSource.prototype = util.inherit(Evented, {
     minzoom: 0,
     maxzoom: 22,
     tileSize: 512,
+    reparseOverscaled: true,
     _loaded: false,
 
     onAdd: function(map) {
@@ -37,36 +38,49 @@ VectorTileSource.prototype = util.inherit(Evented, {
         }
     },
 
+    reload: function() {
+        this._pyramid.reload();
+    },
+
     render: Source._renderTiles,
     featuresAt: Source._vectorFeaturesAt,
 
     _loadTile: function(tile) {
+        var overscaling = tile.zoom > this.maxzoom ? Math.pow(2, tile.zoom - this.maxzoom) : 1;
         var params = {
-            url: TileCoord.url(tile.id, this.tiles),
-            id: tile.uid,
-            tileId: tile.id,
+            url: TileCoord.url(tile.id, this.tiles, this.maxzoom),
+            uid: tile.uid,
+            id: tile.id,
             zoom: tile.zoom,
             maxZoom: this.maxzoom,
-            tileSize: this.tileSize,
+            tileSize: this.tileSize * overscaling,
             source: this.id,
-            depth: tile.zoom >= this.maxzoom ? this.map.options.maxZoom - tile.zoom : 1
+            overscaling: overscaling
         };
 
-        tile.workerID = this.dispatcher.send('load tile', params, function(err, data) {
-            if (tile.aborted)
-                return;
+        if (tile.workerID) {
+            this.dispatcher.send('reload tile', params, this._tileLoaded.bind(this, tile), tile.workerID);
+        } else {
+            tile.workerID = this.dispatcher.send('load tile', params, this._tileLoaded.bind(this, tile));
+        }
+    },
 
-            if (err)
-                return this.fire('tile.error', {tile: tile});
+    _tileLoaded: function(tile, err, data) {
+        if (tile.aborted)
+            return;
 
-            tile.loadVectorData(data);
-            this.fire('tile.load', {tile: tile});
-        }.bind(this));
+        if (err) {
+            this.fire('tile.error', {tile: tile});
+            return;
+        }
+
+        tile.loadVectorData(data);
+        this.fire('tile.load', {tile: tile});
     },
 
     _abortTile: function(tile) {
         tile.aborted = true;
-        this.dispatcher.send('abort tile', { id: tile.uid, source: this.id }, null, tile.workerID);
+        this.dispatcher.send('abort tile', { uid: tile.uid, source: this.id }, null, tile.workerID);
     },
 
     _addTile: function(tile) {
@@ -80,6 +94,6 @@ VectorTileSource.prototype = util.inherit(Evented, {
     _unloadTile: function(tile) {
         tile.unloadVectorData(this.map.painter);
         this.glyphAtlas.removeGlyphs(tile.uid);
-        this.dispatcher.send('remove tile', { id: tile.uid, source: this.id }, null, tile.workerID);
+        this.dispatcher.send('remove tile', { uid: tile.uid, source: this.id }, null, tile.workerID);
     }
 });
