@@ -228,13 +228,13 @@ util.extend(exports, {
 
         this._ease(function (k) {
             if (this.zooming) {
-                tr.setZoomAround(util.interpolate(startZoom, zoom, k), around);
+                tr.setZoomAround(interpolate(startZoom, zoom, k), around);
             } else {
                 tr.center = tr.unproject(from.add(to.sub(from).mult(k)));
             }
 
             if (this.rotating) {
-                tr.setBearingAround(util.interpolate(startBearing, bearing, k), options.around);
+                tr.setBearingAround(interpolate(startBearing, bearing, k), options.around);
             }
 
             this.animationLoop.set(300); // text fading
