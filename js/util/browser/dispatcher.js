@@ -14,7 +14,7 @@ function Dispatcher(length, parent) {
 
     var url, blob, i;
 
-    for (i = 0; i < length; i++) {
+    for (i = 0; i < 1; i++) {
         // due to cross domain issues we can't load it directly with the url,
         // so create a blob and object url and load that
         if (absolute) {

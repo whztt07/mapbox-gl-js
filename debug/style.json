@@ -114,7 +114,7 @@
   "sources": {
     "mapbox": {
       "type": "vector",
-      "url": "mapbox://mapbox.mapbox-streets-v6-dev"
+      "url": "mapbox://springmeyer.a5940e48"
     }
   },
   "sprite": "img/sprite",
